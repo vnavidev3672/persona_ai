@@ -7,7 +7,9 @@ import bcrypt, jwt, stripe
 from fastapi import FastAPI, Request, Response, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse, RedirectResponse
+# pyrefly: ignore[missing-import]
 from psycopg.rows import dict_row
+# pyrefly: ignore[import-unresolved]
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel, EmailStr, Field
 import pipeline, sandbox
@@ -121,7 +123,7 @@ def me(u=Depends(user_dep)):
 @app.get("/api/config")
 def config():
     return {"free_limit": LIMITS["free"], "pro_limit": LIMITS["pro"], "never_trained": E.get("AI_PAID_TIER") == "true",
-            "engine_ready": bool(E.get("GEMINI_API_KEY") and E.get("E2B_API_KEY"))}
+            "engine_ready": bool(E.get("GEMINI_API_KEY") and E.get("MODAL_TOKEN_ID") and E.get("MODAL_TOKEN_SECRET"))}
 
 # ---------- generate ----------
 class GenReq(BaseModel):

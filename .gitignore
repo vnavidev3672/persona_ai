@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Environment secrets - NEVER commit these
+.env
+.env.local
+.env.*.local
+# .env.production is intentionally NOT ignored (it only has VITE_API_URL, no secrets)
+
+# OS
+.DS_Store
+Thumbs.db
