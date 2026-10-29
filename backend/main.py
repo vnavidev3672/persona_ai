@@ -123,7 +123,7 @@ def me(u=Depends(user_dep)):
 @app.get("/api/config")
 def config():
     return {"free_limit": LIMITS["free"], "pro_limit": LIMITS["pro"], "never_trained": E.get("AI_PAID_TIER") == "true",
-            "engine_ready": bool(E.get("GEMINI_API_KEY") and E.get("MODAL_TOKEN_ID") and E.get("MODAL_TOKEN_SECRET"))}
+            "engine_ready": bool(E.get("GEMINI_API_KEY"))}
 
 # ---------- generate ----------
 class GenReq(BaseModel):
