@@ -125,6 +125,12 @@ def config():
     return {"free_limit": LIMITS["free"], "pro_limit": LIMITS["pro"], "never_trained": E.get("AI_PAID_TIER") == "true",
             "engine_ready": bool(E.get("GEMINI_API_KEY") and E.get("MODAL_TOKEN_ID") and E.get("MODAL_TOKEN_SECRET"))}
 
+@app.get("/api/debug-env")
+def debug_env():
+    """Temporary: shows which required env vars are set (no values exposed). Remove after debugging."""
+    keys = ["GEMINI_API_KEY", "MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET", "AI_MODEL", "DATABASE_URL", "APP_URL"]
+    return {k: bool(E.get(k, "").strip()) for k in keys}
+
 # ---------- generate ----------
 class GenReq(BaseModel):
     language: Literal["python", "javascript"]
