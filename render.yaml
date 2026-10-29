@@ -25,9 +25,9 @@ services:
         value: gemini-2.5-flash
       - key: AI_PAID_TIER
         value: "false"
-      - key: E2B_API_KEY
+      - key: MODAL_TOKEN_ID
         sync: false
-      - key: E2B_TEMPLATE
+      - key: MODAL_TOKEN_SECRET
         sync: false
       - key: FREE_RUNS_PER_MONTH
         value: "15"
