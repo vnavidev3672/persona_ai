@@ -48,9 +48,43 @@ async def guard(request: Request, call_next):
         if request.method in ("POST", "DELETE") and not request.url.path.endswith("/stripe/webhook") \
                 and request.headers.get("x-ppai") != "1":
             return JSONResponse({"detail": "Missing header"}, 400)  # CSRF: forces a CORS preflight
+        return await call_next(request)
     except HTTPException as e:
         return JSONResponse({"detail": e.detail}, e.status_code)
-    return await call_next(request)
+    except Exception as e:
+        log.exception("Unhandled server error: %s", e)
+        resp = JSONResponse({"detail": f"Server error: {str(e)}"}, 500)
+        origin = request.headers.get("origin")
+        if origin:
+            resp.headers["Access-Control-Allow-Origin"] = origin
+            resp.headers["Access-Control-Allow-Credentials"] = "true"
+        return resp
+
+@app.on_event("startup")
+def init_db():
+    try:
+        schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+        if os.path.exists(schema_path):
+            with open(schema_path) as f:
+                sql = f.read()
+            with pool.connection() as c:
+                c.execute(sql)
+            log.info("Database schema verified/initialized successfully.")
+    except Exception as e:
+        log.exception("DB init error: %s", e)
+
+@app.get("/api/health")
+def health():
+    db_ok = False
+    db_err = None
+    try:
+        with pool.connection() as c:
+            c.execute("SELECT 1")
+            db_ok = True
+    except Exception as e:
+        db_err = str(e)
+    return {"status": "ok", "database": db_ok, "db_error": db_err}
+
 
 # ---------- auth ----------
 def make_token(uid): return jwt.encode({"sub": str(uid), "exp": datetime.now(timezone.utc) + timedelta(days=14)}, E["JWT_SECRET"], "HS256")
