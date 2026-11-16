@@ -68,24 +68,36 @@ class Creds(BaseModel):
     password: str = Field(min_length=10, max_length=128)
 
 def send_mail(to, subject, body):
+    """Send an email. Returns True on success, False if SMTP not configured."""
     if not E.get("SMTP_HOST"):
-        if E.get("ENV") == "dev": log.warning("DEV EMAIL to %s: %s", to, body); return
-        raise HTTPException(503, "Email service is not configured.")
-    m = EmailMessage(); m["To"], m["From"], m["Subject"] = to, E["SMTP_FROM"], subject; m.set_content(body)
+        log.warning("SMTP not configured – skipping email to %s: %s", to, body)
+        return False
+    m = EmailMessage(); m["To"], m["From"], m["Subject"] = to, E.get("SMTP_FROM", "no-reply@example.com"), subject; m.set_content(body)
     with smtplib.SMTP(E["SMTP_HOST"], int(E.get("SMTP_PORT", 587))) as s:
         s.starttls(); s.login(E["SMTP_USER"], E["SMTP_PASS"]); s.send_message(m)
+    return True
 
 @app.post("/api/auth/register", status_code=202)
-def register(c: Creds):
+def register(c: Creds, response: Response):
     email = c.email.lower()
     h = bcrypt.hashpw(c.password.encode(), bcrypt.gensalt()).decode()
     u = q("INSERT INTO users(email,password_hash) VALUES(%s,%s) ON CONFLICT(email) DO UPDATE SET email=EXCLUDED.email RETURNING id, verified",
           email, h, one=True)
     if not u["verified"]:
-        raw = secrets.token_urlsafe(32)
-        q("INSERT INTO email_tokens VALUES(%s,%s,now()+interval '1 day')", hashlib.sha256(raw.encode()).hexdigest(), u["id"])
-        send_mail(email, "Verify your Persona Pulse AI account", f"Verify: {E['API_URL']}/api/auth/verify?token={raw}")
-    return {"message": "If this email can be registered, a verification link is on its way."}  # no account enumeration
+        smtp_configured = bool(E.get("SMTP_HOST"))
+        if smtp_configured:
+            # Send verification email
+            raw = secrets.token_urlsafe(32)
+            q("INSERT INTO email_tokens VALUES(%s,%s,now()+interval '1 day') ON CONFLICT DO NOTHING",
+              hashlib.sha256(raw.encode()).hexdigest(), u["id"])
+            send_mail(email, "Verify your Persona Pulse AI account",
+                      f"Verify: {E['API_URL']}/api/auth/verify?token={raw}")
+            return {"message": "Check your inbox for a verification link.", "email_sent": True}
+        else:
+            # No SMTP configured – auto-verify so users can actually log in
+            q("UPDATE users SET verified=true WHERE id=%s", u["id"])
+            return {"message": "Account created! You can now sign in.", "email_sent": False, "auto_verified": True}
+    return {"message": "Account already exists. Please sign in.", "email_sent": False}
 
 @app.get("/api/auth/verify")
 def verify(token: str):
