@@ -23,7 +23,7 @@ SECURE = E.get("ENV") != "dev"
 
 app = FastAPI(title="Persona Pulse AI")
 app.add_middleware(CORSMiddleware, allow_origins=[E["APP_URL"]], allow_credentials=True,
-                   allow_methods=["GET", "POST", "DELETE"], allow_headers=["Content-Type", "X-PPAI"])
+                   allow_methods=["GET", "POST", "DELETE"], allow_headers=["Content-Type", "X-PPAI", "Authorization"])
 
 def q(sql, *args, one=False, all_=False):
     with pool.connection() as c:
@@ -91,6 +91,9 @@ def make_token(uid): return jwt.encode({"sub": str(uid), "exp": datetime.now(tim
 
 def user_dep(request: Request):
     tok = request.cookies.get("ppai_session")
+    auth_hdr = request.headers.get("authorization")
+    if not tok and auth_hdr and auth_hdr.startswith("Bearer "):
+        tok = auth_hdr[7:]
     try: uid = jwt.decode(tok, E["JWT_SECRET"], ["HS256"])["sub"]
     except Exception: raise HTTPException(401, "Please sign in.")
     u = q("SELECT * FROM users WHERE id=%s", uid, one=True)
@@ -147,9 +150,11 @@ def login(c: Creds, request: Request, response: Response):
     if not u or not bcrypt.checkpw(c.password.encode(), u["password_hash"].encode()):
         raise HTTPException(401, "Wrong email or password.")
     if not u["verified"]: raise HTTPException(403, "Please verify your email first.")
-    response.set_cookie("ppai_session", make_token(u["id"]), httponly=True, secure=SECURE,
-                        samesite=E.get("COOKIE_SAMESITE", "lax"), max_age=14 * 86400)
-    return {"ok": True}
+    token = make_token(u["id"])
+    cookie_samesite = E.get("COOKIE_SAMESITE", "none" if SECURE else "lax")
+    response.set_cookie("ppai_session", token, httponly=True, secure=SECURE,
+                        samesite=cookie_samesite, max_age=14 * 86400)
+    return {"ok": True, "token": token}
 
 @app.post("/api/auth/logout")
 def logout(response: Response):

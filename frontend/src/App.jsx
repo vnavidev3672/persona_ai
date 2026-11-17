@@ -7,12 +7,14 @@ const API = import.meta.env.VITE_API_URL || "";
 async function apiFetch(path, opts = {}, retries = 2) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+  const token = typeof localStorage !== "undefined" ? localStorage.getItem("ppai_token") : null;
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
   try {
     const r = await fetch(API + path, {
       credentials: "include",
       signal: controller.signal,
       ...opts,
-      headers: { "Content-Type": "application/json", "X-PPAI": "1", ...(opts.headers || {}) },
+      headers: { "Content-Type": "application/json", "X-PPAI": "1", ...authHeaders, ...(opts.headers || {}) },
     });
     clearTimeout(timeout);
     return r;
@@ -86,6 +88,7 @@ export default function App() {
             <button
               className="link"
               onClick={async () => {
+                localStorage.removeItem("ppai_token");
                 await json("/api/auth/logout", "POST");
                 setMe(false);
                 go("/");
@@ -109,9 +112,9 @@ export default function App() {
       </header>
 
       <main>
-        {route === "/login" && <Auth go={go} />}
-        {route === "/app" && (me ? <Studio me={me} refresh={refresh} /> : me === false ? <Auth go={go} /> : null)}
-        {route === "/history" && (me ? <History /> : <Auth go={go} />)}
+        {route === "/login" && <Auth go={go} refresh={refresh} />}
+        {route === "/app" && (me ? <Studio me={me} refresh={refresh} /> : me === false ? <Auth go={go} refresh={refresh} /> : null)}
+        {route === "/history" && (me ? <History /> : <Auth go={go} refresh={refresh} />)}
         {!["/login", "/app", "/history"].includes(route) && <Landing cfg={cfg} go={go} />}
       </main>
     </>
@@ -189,7 +192,7 @@ function Landing({ cfg, go }) {
 }
 
 // ── Auth ──────────────────────────────────────────────────
-function Auth({ go }) {
+function Auth({ go, refresh }) {
   const [email, setE] = useState("");
   const [password, setP] = useState("");
   const [mode, setMode] = useState("login");
@@ -204,6 +207,8 @@ function Auth({ go }) {
     try {
       const d = await json(`/api/auth/${mode}`, "POST", { email, password });
       if (mode === "login") {
+        if (d.token) localStorage.setItem("ppai_token", d.token);
+        if (refresh) await refresh();
         go("/app");
       } else {
         // Show success and auto-switch to login if auto-verified
