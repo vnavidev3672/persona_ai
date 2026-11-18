@@ -38,38 +38,36 @@ def gemini(system, contents):
         if m and m not in models_to_try:
             models_to_try.append(m)
 
-    last = "unknown error"
+    errors = []
     for model_name in models_to_try:
         for api_version in ("v1beta", "v1"):
             url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={api_key}"
             body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
                     "generationConfig": {"temperature": 0.2}}
-            headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
-            for wait in (0, 1):
-                if wait > 0:
-                    time.sleep(wait)
-                try:
-                    r = httpx.post(url, json=body, headers=headers, timeout=90)
-                except httpx.TransportError as e:
-                    last = str(e); continue
-                if r.status_code == 429:
-                    raise AIRateLimited()
-                if r.status_code in RETRY_STATUS:
-                    last = f"HTTP {r.status_code}"; continue
-                if r.status_code != 200:
-                    err_detail = ""
-                    try: err_detail = r.json().get("error", {}).get("message", "")
-                    except Exception: err_detail = r.text[:200]
-                    last = f"{model_name} on {api_version} (HTTP {r.status_code}: {err_detail})"
-                    if r.status_code in (404, 400):
-                        break  # try next version/model
-                    raise AIUnavailable(f"AI provider returned HTTP {r.status_code}: {err_detail}")
-                try:
-                    parts = r.json()["candidates"][0]["content"]["parts"]
-                    return "".join(p.get("text", "") for p in parts)
-                except (KeyError, IndexError, ValueError):
-                    raise AIUnavailable("AI returned no usable answer (possibly blocked)")
-    raise AIUnavailable(f"AI provider unavailable ({last})")
+            headers = {"Content-Type": "application/json"}
+            try:
+                r = httpx.post(url, json=body, headers=headers, timeout=60)
+            except httpx.TransportError as e:
+                errors.append(f"{model_name}/{api_version}: network error {e}")
+                continue
+            if r.status_code == 429:
+                raise AIRateLimited()
+            if r.status_code in RETRY_STATUS:
+                errors.append(f"{model_name}/{api_version}: HTTP {r.status_code}")
+                continue
+            if r.status_code != 200:
+                err_detail = ""
+                try: err_detail = r.json().get("error", {}).get("message", "")
+                except Exception: err_detail = r.text[:150]
+                errors.append(f"{model_name}/{api_version}: {r.status_code} ({err_detail})")
+                continue
+            try:
+                parts = r.json()["candidates"][0]["content"]["parts"]
+                return "".join(p.get("text", "") for p in parts)
+            except (KeyError, IndexError, ValueError):
+                errors.append(f"{model_name}/{api_version}: invalid response format")
+                continue
+    raise AIUnavailable(f"AI provider failed: {'; '.join(errors)}")
 
 def extract(text):
     blocks = re.findall(r"```[a-zA-Z]*\n(.*?)```", text, re.S)

@@ -101,6 +101,7 @@ def health():
     gemini_key = E.get("GEMINI_API_KEY", "").strip()
     key_prefix = gemini_key[:6] + "..." + gemini_key[-4:] if len(gemini_key) > 10 else "missing"
     ai_probe = "untested"
+    gen_probe = "untested"
     if gemini_key:
         try:
             r = httpx.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}", timeout=10)
@@ -111,8 +112,14 @@ def health():
                 ai_probe = f"HTTP {r.status_code}: {r.text[:250]}"
         except Exception as ex:
             ai_probe = f"probe error: {ex}"
+        try:
+            t_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+            t_r = httpx.post(t_url, json={"contents": [{"parts": [{"text": "hi"}]}]}, timeout=10)
+            gen_probe = f"HTTP {t_r.status_code}: {t_r.text[:300]}"
+        except Exception as ex:
+            gen_probe = f"post error: {ex}"
     modal_ok = bool(E.get("MODAL_TOKEN_ID") and E.get("MODAL_TOKEN_SECRET"))
-    return {"status": "ok", "database": db_ok, "db_error": db_err, "key_prefix": key_prefix, "ai_probe": ai_probe, "modal_configured": modal_ok}
+    return {"status": "ok", "database": db_ok, "db_error": db_err, "key_prefix": key_prefix, "ai_probe": ai_probe, "gen_probe": gen_probe, "modal_configured": modal_ok}
 
 
 # ---------- auth ----------
