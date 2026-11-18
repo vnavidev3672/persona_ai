@@ -111,7 +111,8 @@ def health():
                 ai_probe = f"HTTP {r.status_code}: {r.text[:250]}"
         except Exception as ex:
             ai_probe = f"probe error: {ex}"
-    return {"status": "ok", "database": db_ok, "db_error": db_err, "key_prefix": key_prefix, "ai_probe": ai_probe}
+    modal_ok = bool(E.get("MODAL_TOKEN_ID") and E.get("MODAL_TOKEN_SECRET"))
+    return {"status": "ok", "database": db_ok, "db_error": db_err, "key_prefix": key_prefix, "ai_probe": ai_probe, "modal_configured": modal_ok}
 
 
 # ---------- auth ----------

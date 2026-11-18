@@ -32,10 +32,10 @@ def gemini(system, contents):
     if not api_key:
         raise AIUnavailable("GEMINI_API_KEY is not configured on the server.")
     
-    preferred_model = os.environ.get("AI_MODEL", "gemini-1.5-flash").strip()
-    models_to_try = [preferred_model]
-    for m in ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-pro"]:
-        if m not in models_to_try:
+    preferred_model = os.environ.get("AI_MODEL", "gemini-2.5-flash").strip()
+    models_to_try = []
+    for m in [preferred_model, "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-1.5-flash"]:
+        if m and m not in models_to_try:
             models_to_try.append(m)
 
     last = "unknown error"
