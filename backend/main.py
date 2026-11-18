@@ -1,4 +1,4 @@
-import os, json, time, queue, threading, secrets, hashlib, smtplib, logging
+import os, json, time, queue, threading, secrets, hashlib, smtplib, logging, httpx
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -98,7 +98,20 @@ def health():
             db_ok = True
     except Exception as e:
         db_err = str(e)
-    return {"status": "ok", "database": db_ok, "db_error": db_err}
+    gemini_key = E.get("GEMINI_API_KEY", "").strip()
+    key_prefix = gemini_key[:6] + "..." + gemini_key[-4:] if len(gemini_key) > 10 else "missing"
+    ai_probe = "untested"
+    if gemini_key:
+        try:
+            r = httpx.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}", timeout=10)
+            if r.status_code == 200:
+                available = [m["name"].replace("models/", "") for m in r.json().get("models", []) if "generateContent" in m.get("supportedGenerationMethods", [])]
+                ai_probe = f"ok, available models: {available[:6]}"
+            else:
+                ai_probe = f"HTTP {r.status_code}: {r.text[:250]}"
+        except Exception as ex:
+            ai_probe = f"probe error: {ex}"
+    return {"status": "ok", "database": db_ok, "db_error": db_err, "key_prefix": key_prefix, "ai_probe": ai_probe}
 
 
 # ---------- auth ----------

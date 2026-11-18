@@ -33,43 +33,42 @@ def gemini(system, contents):
         raise AIUnavailable("GEMINI_API_KEY is not configured on the server.")
     
     preferred_model = os.environ.get("AI_MODEL", "gemini-1.5-flash").strip()
-    # gemini-2.5-flash does not exist in Gemini API; fallback to gemini-1.5-flash
     models_to_try = [preferred_model]
-    if preferred_model == "gemini-2.5-flash":
-        models_to_try = ["gemini-1.5-flash", "gemini-2.0-flash"]
-    elif "gemini-1.5-flash" not in models_to_try:
-        models_to_try.append("gemini-1.5-flash")
+    for m in ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-pro"]:
+        if m not in models_to_try:
+            models_to_try.append(m)
 
     last = "unknown error"
     for model_name in models_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-        body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
-                "generationConfig": {"temperature": 0.2}}
-        headers = {"x-goog-api-key": api_key}
-        for wait in (0, 1, 3, 6):
-            if wait > 0:
-                time.sleep(wait)
-            try:
-                r = httpx.post(url, json=body, headers=headers, timeout=90)
-            except httpx.TransportError as e:
-                last = str(e); continue
-            if r.status_code == 429:
-                raise AIRateLimited()
-            if r.status_code in RETRY_STATUS:
-                last = f"HTTP {r.status_code}"; continue
-            if r.status_code == 404:
-                last = f"Model {model_name} not found (HTTP 404)"
-                break  # try next fallback model
-            if r.status_code != 200:
-                err_detail = ""
-                try: err_detail = r.json().get("error", {}).get("message", "")
-                except Exception: err_detail = r.text[:200]
-                raise AIUnavailable(f"AI provider returned HTTP {r.status_code}: {err_detail}")
-            try:
-                parts = r.json()["candidates"][0]["content"]["parts"]
-                return "".join(p.get("text", "") for p in parts)
-            except (KeyError, IndexError, ValueError):
-                raise AIUnavailable("AI returned no usable answer (possibly blocked)")
+        for api_version in ("v1beta", "v1"):
+            url = f"https://generativelanguage.googleapis.com/{api_version}/models/{model_name}:generateContent?key={api_key}"
+            body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
+                    "generationConfig": {"temperature": 0.2}}
+            headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
+            for wait in (0, 1):
+                if wait > 0:
+                    time.sleep(wait)
+                try:
+                    r = httpx.post(url, json=body, headers=headers, timeout=90)
+                except httpx.TransportError as e:
+                    last = str(e); continue
+                if r.status_code == 429:
+                    raise AIRateLimited()
+                if r.status_code in RETRY_STATUS:
+                    last = f"HTTP {r.status_code}"; continue
+                if r.status_code != 200:
+                    err_detail = ""
+                    try: err_detail = r.json().get("error", {}).get("message", "")
+                    except Exception: err_detail = r.text[:200]
+                    last = f"{model_name} on {api_version} (HTTP {r.status_code}: {err_detail})"
+                    if r.status_code in (404, 400):
+                        break  # try next version/model
+                    raise AIUnavailable(f"AI provider returned HTTP {r.status_code}: {err_detail}")
+                try:
+                    parts = r.json()["candidates"][0]["content"]["parts"]
+                    return "".join(p.get("text", "") for p in parts)
+                except (KeyError, IndexError, ValueError):
+                    raise AIUnavailable("AI returned no usable answer (possibly blocked)")
     raise AIUnavailable(f"AI provider unavailable ({last})")
 
 def extract(text):
