@@ -16,7 +16,15 @@ import pipeline, sandbox
 
 E = os.environ
 log = logging.getLogger("ppai")
-pool = ConnectionPool(E["DATABASE_URL"], kwargs={"row_factory": dict_row}, min_size=1, max_size=10, open=True)
+pool = ConnectionPool(
+    E["DATABASE_URL"],
+    kwargs={"row_factory": dict_row},
+    min_size=0,
+    max_size=10,
+    max_idle=60,
+    check=ConnectionPool.check_connection,
+    open=True,
+)
 stripe.api_key = E.get("STRIPE_SECRET_KEY", "")
 LIMITS = {"free": int(E.get("FREE_RUNS_PER_MONTH", 15)), "pro": int(E.get("PRO_RUNS_PER_MONTH", 300))}
 SECURE = E.get("ENV") != "dev"
@@ -26,9 +34,16 @@ app.add_middleware(CORSMiddleware, allow_origins=[E["APP_URL"]], allow_credentia
                    allow_methods=["GET", "POST", "DELETE"], allow_headers=["Content-Type", "X-PPAI", "Authorization"])
 
 def q(sql, *args, one=False, all_=False):
-    with pool.connection() as c:
-        cur = c.execute(sql, args)
-        return cur.fetchone() if one else cur.fetchall() if all_ else None
+    for attempt in range(2):
+        try:
+            with pool.connection() as c:
+                cur = c.execute(sql, args)
+                return cur.fetchone() if one else cur.fetchall() if all_ else None
+        except Exception as e:
+            if attempt == 0:
+                log.warning("Database query retry on error: %s", e)
+                continue
+            raise
 
 # ---------- rate limiting (in-memory; swap for Redis if you run >1 instance) ----------
 _hits = defaultdict(deque)
