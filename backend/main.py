@@ -218,11 +218,14 @@ def generate(req: GenReq, u=Depends(user_dep)):
             events.put({"type": "result", "id": str(rid), **res, "used": row["count"], "limit": lim})
         except Exception as e:
             q("UPDATE usage SET count=GREATEST(count-1,0) WHERE user_id=%s AND month=%s", u["id"], month())  # refund infra failures
-            msg = ("The AI service is busy right now (rate limit). Please try again in a minute. This run was not counted."
-                   if isinstance(e, pipeline.AIRateLimited) else
-                   "The AI service or test sandbox is temporarily unavailable. This run was not counted."
-                   if isinstance(e, (pipeline.AIUnavailable, sandbox.SandboxUnavailable)) else "Something went wrong. This run was not counted.")
-            if not isinstance(e, (pipeline.AIRateLimited, pipeline.AIUnavailable, sandbox.SandboxUnavailable)): log.exception("run failed")
+            log.exception("run failed: %s", e)
+            err_msg = str(e)
+            if isinstance(e, pipeline.AIRateLimited):
+                msg = "The AI service is busy right now (rate limit). Please try again in a minute. This run was not counted."
+            elif isinstance(e, (pipeline.AIUnavailable, sandbox.SandboxUnavailable)):
+                msg = f"Service temporarily unavailable: {err_msg}. This run was not counted."
+            else:
+                msg = f"Error ({type(e).__name__}): {err_msg}. This run was not counted."
             events.put({"type": "error", "text": msg})
         events.put(None)
 
