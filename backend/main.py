@@ -113,7 +113,7 @@ def health():
         except Exception as ex:
             ai_probe = f"probe error: {ex}"
         try:
-            t_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+            t_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={gemini_key}"
             t_r = httpx.post(t_url, json={"contents": [{"parts": [{"text": "hi"}]}]}, timeout=10)
             gen_probe = f"HTTP {t_r.status_code}: {t_r.text[:300]}"
         except Exception as ex:
